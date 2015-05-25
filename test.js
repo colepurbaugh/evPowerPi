@@ -92,20 +92,24 @@ var processIncomingSerialportData = function(data) {
 			// chargeState
 			case dataSplit[1] > 0 && dataSplit[1] < 7:
 				// 1 = not connected, 2 = ready, 3 = charge, 4 = vent, 5 & 6 = error
+				// TODO: write log to file
 				break;
 			// maxAmps
 			case dataSplit[1] < 6:
+				// TODO: write log to file
 				break;
 			// current
 			case dataSplit[1] < 999:
+				// TODO: write log to file
 				break;
 			default:
 				break;				
 		}
 	}	
+	// write output to file
 }
 
-var SerialPort = require("/home/pi/node_modules/serialport").SerialPort;
+var SerialPort = require("serialport").SerialPort;
 
 var serialPort = new SerialPort("/dev/ttyUSB0", {
 	baudrate: 115200,

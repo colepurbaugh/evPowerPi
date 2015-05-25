@@ -103,9 +103,10 @@ var processIncomingSerialportData = function(data) {
 				break;				
 		}
 	}	
+	// write output to file
 }
 
-var SerialPort = require("/home/pi/node_modules/serialport").SerialPort;
+var SerialPort = require("serialport").SerialPort;
 
 var serialPort = new SerialPort("/dev/ttyUSB0", {
 	baudrate: 115200,
