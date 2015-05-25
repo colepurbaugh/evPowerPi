@@ -9,13 +9,15 @@ var reporter = new Reporter(nodeNumber);
 var io = reporter.io;
 
 var request = require('request'),
-    _ = require('lodash');
+    
 */
+var _ = require('lodash');
 
 var SerialPort = require("/home/pi/node_modules/serialport").SerialPort
 var serialPort = new SerialPort("/dev/ttyUSB0", {
   baudrate: 115200
 });
+
 console.log('program start');
 
 var 	evState,
@@ -28,19 +30,29 @@ var 	evState,
 	"$SC 23*3F", "$SC 24*40", "$SC 25*41", "$SC 26*42", "$SC 27*43", 
 	"$SC 28*44", "$SC 29*45", "$SC 30*3D"];
 
+var dataBufferString = "";
+
 var set = {
 
 	//variable "amps" must be between 8 and 16 for L1 (120V) 
 	//                    and between 8 and 30 for L2 (240V)
 	maxAmps: function(amps){
-		serialPort.on("open", function () {
-			serialPort.write(ampsArray[amps - 8] + "\r\n", function(err, results) {
-				//console.log('err ' + err);
-				serialPort.on('data', function(data) {
-					console.log(data.toString());
-				});
+		if(amps <= 7 || amps >= 30){
+			return false;
+		}
+	
+		serialPort.write(ampsArray[amps - 8] + "\r\n", function(err, results) {
+			if(err && !_.isUndefined(err)){				
+				console.log('err ' + err);				
+				exit(0);			
+			}
+			serialPort.on('data', function(data) {
+				dataBufferString += data.toString();
+				console.log(dataBufferString);
 			});
+			
 		});
+		
 	}
 	/*
 	//send information to the server
@@ -86,26 +98,26 @@ var get = {
 	// retrieves state value from openEVSE and put it in the local "evState" variable
 	// 1 = not connected, 2 = ready, 3 = charge, 4 = vent, 5 & 6 = error
 	chargeState: function(){
-		serialPort.on("open", function () {
-			serialPort.write("$GS*BE\r\n", function(err, results) {
-				serialPort.on('data', function(data) {
-					evState = data.toString().substring(4,5);
-					console.log(evState);
-				});
+		
+		serialPort.write("$GS*BE\r\n", function(err, results) {
+			serialPort.on('data', function(data) {
+				evState = data.toString().substring(4,5);
+				console.log(evState);
 			});
 		});
+		
 	},
 
 	//double check to make sure the "setMaxAmps" function is working
 	maxAmps: function(){
-		serialPort.on("open", function () {
-			serialPort.write("$GE*B0\r\n", function(err, results) {
-				//console.log('err ' + err);
-				serialPort.on('data', function(data) {
-					console.log(data.toString());
-				});
+		
+		serialPort.write("$GE*B0\r\n", function(err, results) {
+			//console.log('err ' + err);
+			serialPort.on('data', function(data) {
+				console.log(data.toString());
 			});
 		});
+		
 	},
 
 	//retrieve current consumption in miliamps
@@ -113,22 +125,22 @@ var get = {
 		var counter = 0;
 		var tempData;
 
-		serialPort.on("open", function () {
-			serialPort.write("$GG*B2\r\n", function(err, results) {
-				//console.log('err ' + err);
-				serialPort.on('data', function(data){
-					tempData = data.toString();
-					while (true){
-						if (tempData.charAt(5 + counter) == "" || tempData.charAt(5 + counter) == " " || counter > 20){
-							console.log(tempData.substring(4, 5 + counter));
-							break;
-						}else {
-							counter++;
-						}
+		
+		serialPort.write("$GG*B2\r\n", function(err, results) {
+			//console.log('err ' + err);
+			serialPort.on('data', function(data){
+				tempData = data.toString();
+				while (true){
+					if (tempData.charAt(5 + counter) == "" || tempData.charAt(5 + counter) == " " || counter > 20){
+						console.log(tempData.substring(4, 5 + counter));
+						break;
+					}else {
+						counter++;
 					}
-				});
+				}
 			});
 		});
+		
 	},
 	// Status Report shows all current raspberry pi end values for debugging
 	statusReport: function () {
@@ -142,10 +154,20 @@ var get = {
 }
 
 //******************************************************************************
-//set.maxAmps(17);
+
+
+serialPort.on("open", function () {
+	var num = _.random(8,29);
+	console.log('setting number: ', num);
+	set.maxAmps(num);	
+	//setInterval(function(){
+	//	set.maxAmps(_.random(8,29));	
+	//}, 20000)
+});
+
 //get.chargeState();
 //get.maxAmps();
-get.current();
+//get.current();
 
 /*
 //Sample Working Code
