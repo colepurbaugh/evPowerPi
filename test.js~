@@ -2,21 +2,8 @@
 var nodeNumber = process.env.POWERPI || 0;
 console.log('Node number started ', nodeNumber);
 
-/*
-var path = require('path');
-var Reporter = require(path.join(__dirname, 'lib', 'node_socket'));
-var reporter = new Reporter(nodeNumber);
-var io = reporter.io;
-
-var request = require('request'),
-    
-*/
-var _ = require('lodash');
-
-var SerialPort = require("/home/pi/node_modules/serialport").SerialPort
-var serialPort = new SerialPort("/dev/ttyUSB0", {
-  baudrate: 115200
-});
+var _ = require('lodash'),
+	async = require('async');
 
 console.log('program start');
 
@@ -46,46 +33,13 @@ var set = {
 			}
 		});
 		
-	}
-	/*
-	//send information to the server
-	toServer: function(nodeValue, dataValue, tempValue){
-        io.emit('putNodeData', {
-            nodeNumber: String(nodeValue),
-            reading: {
-                time: new Date().getTime(),
-                data: dataValue,
-                temp: tempValue
-            }
-        })
-    }
-	*/
+	},
+	toLogFile: function(log){
+		require('fs')	
+	}	
 }
 
 var get = {
-
-	//request information from server
-	/*
-	fromServer: function(){
-        var serverUrl = "http://power-meter.herokuapp.com/api/getLastWindReading";
-        // options needed in order to send
-        var toRecieveOptions = {
-            url: serverUrl,
-            method: "GET",
-            json: true
-        };
-        // the actual request, with our options
-        request(toRecieveOptions, function(err, res, body){
-            // show an error if it exists, otherwise do nothing
-            if(err){
-                console.error(err);
-            } else {
-		        setReduction(body.wind, body.basePt);
-                console.log('Data retrieved from server - ', 'gen: ' + body.wind, 'bspt: ' + body.basePt);
-            }
-        });
-    },
-    */
 
 	// Update EV charge state
 	// retrieves state value from openEVSE and put it in the local "evState" variable
@@ -97,12 +51,14 @@ var get = {
 	//double check to make sure the "setMaxAmps" function is working
 	maxAmps: function(){
 		serialPort.write("$GE*B0\r\n", function(err, results) {});
+		
 	},
 
 	//retrieve current consumption in miliamps
 	current: function(){
 		serialPort.write("$GG*B2\r\n", function(err, results) {});
 	},
+
 	// Status Report shows all current raspberry pi end values for debugging
 	statusReport: function () {
 		console.log('***Status Report***');
@@ -114,38 +70,54 @@ var get = {
 
 }
 
+var q = async.queue(function (task, cb) {
+	task.name.call(null, task.data);
+	setTimeout(function(){
+		if(cb && !_.isUndefined(cb)){
+			cb();		
+		}	
+	}, 1000)
+}, 1);
+
 //******************************************************************************
+var processIncomingSerialportData = function(data) {
+	data = data.toString();
+	var dataSplit = data.split(" ");
+	if(data.length > 3 && dataSplit.length > 1){
+		console.log("DATA INCOMING: ", data);
+		switch(dataSplit[1]){
+			// chargeState
+			case dataSplit[1] > 0 && dataSplit[1] < 7:
+				// 1 = not connected, 2 = ready, 3 = charge, 4 = vent, 5 & 6 = error
+				break;
+			// maxAmps
+			case dataSplit[1] < 6:
+				break;
+			// current
+			case dataSplit[1] < 999:
+				break;
+			default:
+				break;				
+		}
+	}	
+}
+
+var SerialPort = require("/home/pi/node_modules/serialport").SerialPort;
+
+var serialPort = new SerialPort("/dev/ttyUSB0", {
+	baudrate: 115200,
+	dataCallback: processIncomingSerialportData
+});
 
 serialPort.on("open", function () {
-	if(serialPort.isOpen()){
-		var mainInterval = setInterval(function(){
-			var num = _.random(8,29);
-			console.log('setting number: ', num);
-			get.current();	
-		}, 2000);
 
-		serialPort.on("data", function(data) {
-			data = data.toString();
-			var dataSplit = data.split(" ");
-
-			if(data.length > 3 && dataSplit.length > 1){
-				switch(dataSplit[1]){
-					// chargeState
-					case dataSplit[1] > 0 && dataSplit[1] < 7:
-						break;
-					// maxAmps
-					case dataSplit[1] < 6:
-						break;
-					// current
-					case dataSplit[1] < 999:
-						break;
-					default:
-						return;
-						break;				
-				}
-			}	
-		});
-	}	
+	var mainInterval = setInterval(function(){
+		var num = _.random(8,29);
+		//console.log('setting number: ', num);
+		q.push({ name: set.maxAmps, data: num});
+		q.push({ name: get.chargeState });	
+	}, 2000);
+		
 });
 
 
