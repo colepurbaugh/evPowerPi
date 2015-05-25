@@ -30,8 +30,6 @@ var 	evState,
 	"$SC 23*3F", "$SC 24*40", "$SC 25*41", "$SC 26*42", "$SC 27*43", 
 	"$SC 28*44", "$SC 29*45", "$SC 30*3D"];
 
-var dataBufferString = "";
-
 var set = {
 
 	//variable "amps" must be between 8 and 16 for L1 (120V) 
@@ -46,11 +44,6 @@ var set = {
 				console.log('err ' + err);				
 				exit(0);			
 			}
-			serialPort.on('data', function(data) {
-				dataBufferString += data.toString();
-				console.log(dataBufferString);
-			});
-			
 		});
 		
 	}
@@ -98,49 +91,17 @@ var get = {
 	// retrieves state value from openEVSE and put it in the local "evState" variable
 	// 1 = not connected, 2 = ready, 3 = charge, 4 = vent, 5 & 6 = error
 	chargeState: function(){
-		
-		serialPort.write("$GS*BE\r\n", function(err, results) {
-			serialPort.on('data', function(data) {
-				evState = data.toString().substring(4,5);
-				console.log(evState);
-			});
-		});
-		
+		serialPort.write("$GS*BE\r\n", function(err, results) {});
 	},
 
 	//double check to make sure the "setMaxAmps" function is working
 	maxAmps: function(){
-		
-		serialPort.write("$GE*B0\r\n", function(err, results) {
-			//console.log('err ' + err);
-			serialPort.on('data', function(data) {
-				console.log(data.toString());
-			});
-		});
-		
+		serialPort.write("$GE*B0\r\n", function(err, results) {});
 	},
 
 	//retrieve current consumption in miliamps
 	current: function(){
-		var counter = 0;
-		var tempData;
-
-		
-		serialPort.write("$GG*B2\r\n", function(err, results) {
-			//console.log('err ' + err);
-			serialPort.on('data', function(data){
-				tempData = data.toString();
-				while (true){
-					if (tempData.charAt(5 + counter) == "" || tempData.charAt(5 + counter) == " " || counter > 20){
-						console.log(tempData.substring(4, 5 + counter));
-						break;
-					}else {
-						counter++;
-					}
-				}
-			});
-		});
-		
+		serialPort.write("$GG*B2\r\n", function(err, results) {});
 	},
 	// Status Report shows all current raspberry pi end values for debugging
 	statusReport: function () {
@@ -155,33 +116,37 @@ var get = {
 
 //******************************************************************************
 
-
 serialPort.on("open", function () {
-	var num = _.random(8,29);
-	set.maxAmps(num);	
-	//setInterval(function(){
-	//	set.maxAmps(_.random(8,29));	
-	//}, 20000)
+	if(serialPort.isOpen()){
+		var mainInterval = setInterval(function(){
+			var num = _.random(8,29);
+			console.log('setting number: ', num);
+			get.current();	
+		}, 2000);
+
+		serialPort.on("data", function(data) {
+			data = data.toString();
+			var dataSplit = data.split(" ");
+
+			if(data.length > 3 && dataSplit.length > 1){
+				switch(dataSplit[1]){
+					// chargeState
+					case dataSplit[1] > 0 && dataSplit[1] < 7:
+						break;
+					// maxAmps
+					case dataSplit[1] < 6:
+						break;
+					// current
+					case dataSplit[1] < 999:
+						break;
+					default:
+						return;
+						break;				
+				}
+			}	
+		});
+	}	
 });
 
-//get.chargeState();
-//get.maxAmps();
-//get.current();
 
-/*
-//Sample Working Code
-serialPort.on("open", function () {
 
-	console.log('open');
-
-	serialPort.on('data', function(data) {
-    	console.log('data received: ' + data);
-	});
-
-	serialPort.write("$SC 10*3B\r\n", function(err, results) {
-		console.log('err ' + err);
-	    console.log('results ' + results);
-	});
-});
-
-*/
