@@ -70,16 +70,19 @@ var get = {
 
 }
 
+//******************************************************************************
+
+var intervalTime = 300;
+
 var q = async.queue(function (task, cb) {
 	task.name.call(null, task.data);
 	setTimeout(function(){
 		if(cb && !_.isUndefined(cb)){
 			cb();		
 		}	
-	}, 1000)
+	}, intervalTime)
 }, 1);
 
-//******************************************************************************
 var processIncomingSerialportData = function(data) {
 	data = data.toString();
 	var dataSplit = data.split(" ");
@@ -116,9 +119,7 @@ serialPort.on("open", function () {
 		//console.log('setting number: ', num);
 		q.push({ name: set.maxAmps, data: num});
 		q.push({ name: get.chargeState });	
-	}, 2000);
+	}, intervalTime);
 		
 });
-
-
 
