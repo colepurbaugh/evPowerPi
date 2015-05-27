@@ -4,16 +4,10 @@ console.log('Node number started ', nodeNumber);
 
 var _ = require('lodash'),
 	async = require('async');
-var d = new Date();	
 
-var fs = require('fs'),
-	fileName = '//root/Desktop/data' + d.getTime() + '.csv',
-	header = 'timestamp, state, maxAmps, current,\r\n';
-fs.writeFileSync(fileName, header);
-console.log('program started');
-console.log(fileName + ' created on desktop');
+console.log('program start');
 
-var evState,
+var 	evState,
 	maxAmps = 8,
 	amperage = 0,
 	ampsArray = [
@@ -38,7 +32,11 @@ var set = {
 				exit(0);			
 			}
 		});
-	}
+		
+	},
+	toLogFile: function(log){
+		require('fs')	
+	}	
 }
 
 var get = {
@@ -53,11 +51,21 @@ var get = {
 	//double check to make sure the "setMaxAmps" function is working
 	maxAmps: function(){
 		serialPort.write("$GE*B0\r\n", function(err, results) {});
+		
 	},
 
 	//retrieve current consumption in miliamps
 	current: function(){
 		serialPort.write("$GG*B2\r\n", function(err, results) {});
+	},
+
+	// Status Report shows all current raspberry pi end values for debugging
+	statusReport: function () {
+		console.log('***Status Report***');
+		console.log('maxAmps : ' + maxAmps);
+		console.log('amperage : ' + amperage);
+		console.log('evState : ' + evState);
+		statusReport();	console.log('*******************');
 	}
 
 }
@@ -80,23 +88,19 @@ var processIncomingSerialportData = function(data) {
 	var dataSplit = data.split(" ");
 	if(data.length > 3 && dataSplit.length > 1){
 		console.log("DATA INCOMING: ", data);
-		console.log('dataSplit[1] = ' + dataSplit[1]);
 		switch(dataSplit[1]){
 			// chargeState
-			case dataSplit[1] > 0 && dataSplit[1] < 5:
+			case dataSplit[1] > 0 && dataSplit[1] < 7:
 				// 1 = not connected, 2 = ready, 3 = charge, 4 = vent, 5 & 6 = error
-				console.log('state = ' + dataSplit[1])
-				fs.appendFile(fileName, d.getTime + ', ' + dataSplit[1] + ',,');
+				// TODO: write log to file
 				break;
 			// maxAmps
-			case dataSplit[1] > 7 && dataSplit[1] < 31:
-				console.log('maxAmps = ' + dataSplit[1])
-				fs.appendFile(fileName, d.getTime + ',, ' + dataSplit[1] + ',');
+			case dataSplit[1] < 6:
+				// TODO: write log to file
 				break;
 			// current
 			case dataSplit[1] < 999:
-				console.log('current = ' + dataSplit[1])
-				fs.appendFile(fileName, d.getTime + ',,, ' + dataSplit[1]);
+				// TODO: write log to file
 				break;
 			default:
 				break;				
@@ -118,9 +122,7 @@ serialPort.on("open", function () {
 		var num = _.random(8,29);
 		//console.log('setting number: ', num);
 		q.push({ name: set.maxAmps, data: num});
-		q.push({ name: get.chargeState });
-		q.push({ name: get.maxAmps });
-		q.push({ name: get.current });
+		q.push({ name: get.chargeState });	
 	}, intervalTime);
 		
 });
