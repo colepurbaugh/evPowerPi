@@ -5,14 +5,20 @@ console.log('Node number started ', nodeNumber);
 var _ = require('lodash'),
 	async = require('async');	
 
+var parseString = require('xml2js').parseString;
+var http = require('http'),
+	options = {
+		host: '169.237.123.39',
+		port: '8080',
+		path: '/WebService_PV_Power/PV_Power'
+	};
+
 var fs = require('fs'),
 	fileName = '//root/Desktop/data' + new Date().getTime() + '.csv',
-	header = 'timestamp, state, maxAmps, current,\r\n';
-fs.writeFileSync(fileName, header);
-console.log('program started');
-console.log(fileName + ' created on desktop');
+	header = 'timestamp, state, maxAmps, current,\r\n',
+	intervalTime = 1000;
 
-var evState,
+var evState = 0,
 	maxAmps = 8,
 	amperage = 0,
 	ampsArray = [
@@ -22,21 +28,102 @@ var evState,
 	"$SC 23*3F", "$SC 24*40", "$SC 25*41", "$SC 26*42", "$SC 27*43", 
 	"$SC 28*44", "$SC 29*45", "$SC 30*3D"];
 
+//*****************************************************************************************
+
+//create the log file and place it on the unit desktop	
+fs.writeFileSync(fileName, header);
+console.log(fileName + ' created on desktop');
+
+//*****************************************************************************************
+
 var set = {
 
 	//variable "amps" must be between 8 and 16 for L1 (120V) 
 	//                    and between 8 and 30 for L2 (240V)
 	maxAmps: function(amps){
-		if(amps <= 7 || amps >= 30){
+		if(amps <= 8 || amps >= 30){
 			return false;
 		}
-	
+		console.log('sending command ' + ampsArray[amps - 8]);
 		serialPort.write(ampsArray[amps - 8] + "\r\n", function(err, results) {
 			if(err && !_.isUndefined(err)){				
 				console.log('err ' + err);				
 				exit(0);			
 			}
 		});
+	},
+
+	//updates the local variables so that all functions can access them
+	localVars: function (input){
+		if (input > 0 && input < 5) {
+			// 1 = not connected, 2 = ready, 3 = charge, 4 = vent
+			evState = input;
+			//console.log('evState is now ' + input);
+		} else if (input >= 8 && input <= 30) {
+			//maxAmps
+			maxAmps = input;
+			//console.log('maxAmps is now ' + input);
+		} else if (input > 999) {
+			// current
+			amperage = input;
+			//console.log('amperage is now ' + input);
+		}
+	}
+}
+
+var send = {
+	//sends values to the Logios Database
+	toLogiosDB: function (plug, power) {
+		options.path = '/WebService_PV_Power/PV_Power/' + plug + '/' + power
+
+		http.request(options, function(response) {
+			var str = '';
+		
+			//another chunk of data has been recieved, so append it to `str`
+			response.on('data', function (chunk) {
+				str += chunk;
+			});
+		
+			//the whole response has been recieved, so we just print it out here
+			response.on('end', function () {
+				
+				parseString(str, function (err, result) {
+					console.log('***Server Updates***');
+					//Error
+					console.log('error: ' + result.Response.Terminal[0].Value[0]);
+					//EV_Power_actual
+					console.log('EVpower: ' + result.Response.Terminal[1].Value[0]);
+					//EV_Plugged
+					console.log('plugState: ' + result.Response.Terminal[2].Value[0]);
+					//PV_Power_kW
+					console.log('genPower: ' + result.Response.Terminal[3].Value[0]);
+					console.log('********************\n\r');
+				});
+		
+			});
+		}).end();
+	},
+
+	//sends values to node-hive.io
+	toNodeHive: function (plug, power) {
+
+	},
+
+	//takes an input and writes it to the appropriate position in the log csv
+	toLog: function (input){
+		if (input > 0 && input < 5) {
+			// 1 = not connected, 2 = ready, 3 = charge, 4 = vent
+			//console.log('state = ' + input)
+			fs.appendFile(fileName, get.time() + ', ' + input + ',,\r\n');
+		} else if (input >= 8 && input <= 30) {
+			//maxAmps
+			//console.log('maxAmps = ' + input)
+			fs.appendFile(fileName, get.time() + ',, ' + input + ',\r\n');
+		} else if (input > 999) {
+			// current
+			//console.log('current = ' + input)
+			fs.appendFile(fileName, get.time() + ',,, ' + input + '\r\n');
+		}
 	}
 }
 
@@ -65,9 +152,7 @@ var get = {
 
 }
 
-//******************************************************************************
-
-var intervalTime = 300;
+//*****************************************************************************************
 
 var q = async.queue(function (task, cb) {
 	task.name.call(null, task.data);
@@ -83,21 +168,13 @@ var processIncomingSerialportData = function(data) {
 	var dataSplit = data.split(" ");
 	var splitCase = parseInt(dataSplit[1]);
 	if(data.length > 3 && dataSplit.length > 1){
-		console.log("DATA INCOMING: ", data);
-		console.log('splitCase = ' + splitCase);
-		if (splitCase > 0 && splitCase < 5) {
-			// 1 = not connected, 2 = ready, 3 = charge, 4 = vent
-			console.log('state = ' + splitCase)
-			fs.appendFile(fileName, get.time() + ', ' + splitCase + ',,\r\n');
-		} else if (splitCase >= 8 && splitCase <= 30) {
-			//maxAmps
-			console.log('maxAmps = ' + splitCase)
-			fs.appendFile(fileName, get.time() + ',, ' + splitCase + ',\r\n');
-		} else if (splitCase > 999) {
-			// current
-			console.log('current = ' + splitCase)
-			fs.appendFile(fileName, get.time() + ',,, ' + splitCase + '\r\n');
-		}
+		console.log("***Serial Read***");
+		console.log("data: " + data);
+		console.log('value: ' + splitCase);
+		console.log("*****************\n\r");
+		send.toLog(splitCase);
+		set.localVars(splitCase);
+		send.toLogiosDB(evState, amperage);
 	}	
 }
 
@@ -108,15 +185,20 @@ var serialPort = new SerialPort("/dev/ttyUSB0", {
 	dataCallback: processIncomingSerialportData
 });
 
+//******************************************************************************
+
 serialPort.on("open", function () {
 
 	var mainInterval = setInterval(function(){
-		var num = _.random(8,29);
-		//console.log('setting number: ', num);
-		q.push({ name: set.maxAmps, data: num});
+		q.push({ name: set.maxAmps, data: maxAmps});
 		q.push({ name: get.chargeState });
 		q.push({ name: get.maxAmps });
 		q.push({ name: get.current });
+		if (maxAmps < 30) {
+			maxAmps++;
+		} else {
+			maxAmps = 8;
+		}
 	}, intervalTime);
 		
 });
