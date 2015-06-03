@@ -124,12 +124,12 @@ serialPort.on("open", function () {
 			case 2:
 				//get state
 				get.evState();
+				counter++;
 				break;
 			case 3:
 				//log collected values
-				set.log();
-				//send to server
 				
+				//send to server
 				//reset counter
 				counter = 0;
 				break;
