@@ -1,5 +1,5 @@
 
-var nodeNumber = process.env.POWERPI || 0;
+var nodeNumber = 0;
 console.log('Node number started ', nodeNumber);
 
 var _ = require('lodash'),
@@ -15,12 +15,13 @@ var http = require('http'),
 
 var fs = require('fs'),
 	fileName = '//root/Desktop/data' + new Date().getTime() + '.csv',
-	header = 'timestamp, state, maxAmps, current,\r\n',
+	header = 'timestamp, state, maxAmps, current, server,\r\n',
 	intervalTime = 1000;
 
 var evState = 0,
 	maxAmps = 8,
 	amperage = 0,
+	kiloWatts = 0,
 	ampsArray = [
 	"$SC 8*12", "$SC 9*13", "$SC 10*3B", "$SC 11*3C", "$SC 12*3D", 
 	"$SC 13*3E", "$SC 14*3F", "$SC 15*40", "$SC 16*41", "$SC 17*42", 
@@ -66,15 +67,16 @@ var set = {
 		} else if (input > 999) {
 			// current
 			amperage = input;
-			//console.log('amperage is now ' + input);
+			kiloWatts = (amperage/1000)*120
+			//console.log('kiloWatts is now ' + kiloWatts);
 		}
 	}
 }
 
 var send = {
 	//sends values to the Logios Database
-	toLogiosDB: function (plug, power) {
-		options.path = '/WebService_PV_Power/PV_Power/' + plug + '/' + power
+	toLogiosDB: function (id, plug, power) {
+		options.path = '/WebService_PV_Power/PV_Power/' + id + '/' + plug + '/' + power
 
 		http.request(options, function(response) {
 			var str = '';
@@ -93,8 +95,6 @@ var send = {
 					console.log('error: ' + result.Response.Terminal[0].Value[0]);
 					//EV_Power_actual
 					console.log('EVpower: ' + result.Response.Terminal[1].Value[0]);
-					//EV_Plugged
-					console.log('plugState: ' + result.Response.Terminal[2].Value[0]);
 					//PV_Power_kW
 					console.log('genPower: ' + result.Response.Terminal[3].Value[0]);
 					console.log('********************\n\r');
@@ -174,7 +174,7 @@ var processIncomingSerialportData = function(data) {
 		console.log("*****************\n\r");
 		send.toLog(splitCase);
 		set.localVars(splitCase);
-		send.toLogiosDB(evState, amperage);
+		send.toLogiosDB(nodeNumber, evState, kiloWatts);
 	}	
 }
 
@@ -190,15 +190,12 @@ var serialPort = new SerialPort("/dev/ttyUSB0", {
 serialPort.on("open", function () {
 
 	var mainInterval = setInterval(function(){
+
 		q.push({ name: set.maxAmps, data: maxAmps});
 		q.push({ name: get.chargeState });
 		q.push({ name: get.maxAmps });
 		q.push({ name: get.current });
-		if (maxAmps < 30) {
-			maxAmps++;
-		} else {
-			maxAmps = 8;
-		}
+
 	}, intervalTime);
 		
 });

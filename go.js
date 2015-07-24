@@ -7,11 +7,12 @@ var options = {
 	path: '/WebService_PV_Power/PV_Power'
 };
 
+var nodeNumber = 0;
 var plug = 1;
 var power = 1.2;
 
 var toDatabase = function (plug, power){
-	options.path = '/WebService_PV_Power/PV_Power/' + plug + '/' + power
+	options.path = '/WebService_PV_Power/PV_Power/'+ nodeNumber + '/' + plug + '/' + power
 
 	http.request(options, function(response) {
 		var str = '';
@@ -26,13 +27,11 @@ var toDatabase = function (plug, power){
 			
 			parseString(str, function (err, result) {
 				//Error
-				console.log('error = ' + result.Response.Terminal[0].Value[0]);
+				console.log('id = ' + result.Response.Terminal[0].Value[0]);
 				//EV_Power_actual
-				console.log('EVpower = ' + result.Response.Terminal[1].Value[0]);
+				console.log('error = ' + result.Response.Terminal[1].Value[0]);
 				//EV_Plugged
-				console.log('plugState = ' + result.Response.Terminal[2].Value[0]);
-				//PV_Power_kW
-				console.log('genPower = ' + result.Response.Terminal[3].Value[0]);
+				console.log('chargePower = ' + result.Response.Terminal[2].Value[0]);
 			});
 	
 		});

@@ -11,8 +11,10 @@ var fs = require('fs'),
 var evState = 0,
 	maxAmps = 10,
 	amperage = 0,
+	voltage = 120,
+	wattage = 0,
 	evState = 0,
-	intervalTime = 1000,
+	intervalTime = 100,
 	counter = 0,
 	ampsArray = [
 	"$SC 8*12", "$SC 9*13", "$SC 10*3B", "$SC 11*3C", "$SC 12*3D", 
@@ -37,7 +39,7 @@ var set = {
 		if(amps < 8 || amps > 30){
 			return false;
 		}
-		console.log('sending command ' + ampsArray[amps - 8]);
+		console.log('setting amperage ' + ampsArray[amps - 8]);
 		serialPort.write(ampsArray[amps - 8] + "\r\n", function(err, results) {
 			if(err && !_.isUndefined(err)){				
 				console.log('err ' + err);				
@@ -50,22 +52,63 @@ var set = {
 	}
 }
 
+var send = {
+
+	toLog: function () {
+		fs.appendFile(fileName, get.time() + ', ' + evState + ', ' + maxAmps + ', ' + amperage + ',\r\n');
+	},
+
+	toLogios: function () {
+		options.path = '/WebService_PV_Power/PV_Power/' + evState + '/' + wattage
+
+		http.request(options, function(response) {
+			var str = '';
+		
+			//another chunk of data has been recieved, so append it to `str`
+			response.on('data', function (chunk) {
+				str += chunk;
+			});
+		
+			//the whole response has been recieved, so we just print it out here
+			response.on('end', function () {
+				
+				parseString(str, function (err, result) {
+					console.log('\n\r***Recieved from Logios***');
+					//Error
+					console.log('error: ' + result.Response.Terminal[0].Value[0]);
+					//EV_Power_actual
+					console.log('EVpower: ' + result.Response.Terminal[1].Value[0]);
+					//EV_Plugged
+					console.log('plugState: ' + result.Response.Terminal[2].Value[0]);
+					//PV_Power_kW
+					console.log('genPower: ' + result.Response.Terminal[3].Value[0]);
+					console.log('**************************');
+				});
+		
+			});
+		}).end();
+	}
+}
+
 var get = {
 
 	// Update EV charge state
 	// retrieves state value from openEVSE and put it in the local "evState" variable
 	// 1 = not connected, 2 = ready, 3 = charge, 4 = vent, 5 & 6 = error
 	evState: function(){
+		console.log('retrieving state $GS*BE');
 		serialPort.write("$GS*BE\r\n", function(err, results) {});
 	},
 
 	//double check to make sure the "setMaxAmps" function is working
 	maxAmps: function(){
+		console.log('retrieving maxAmps $GE*B0');
 		serialPort.write("$GE*B0\r\n", function(err, results) {});
 	},
 
 	//retrieve current consumption in miliamps
 	current: function(){
+		console.log('retrieving current $GG*B2');
 		serialPort.write("$GG*B2\r\n", function(err, results) {});
 	},
 	//returns how many milliseconds since 1970/01/01
@@ -82,25 +125,29 @@ var process = function(data) {
 	var dataSplit = data.split(" ");
 	var secondValue = parseInt(dataSplit[1]);
 	var thirdValue = parseInt(dataSplit[2]);
-	if(data.length > 3 && dataSplit.length > 1){
-		if (secondValue > 1000) {
-			//set global amperage
+	console.log(data);
+	console.log('second = ' + secondValue);
+	console.log('third = ' + thirdValue);
+	//console.log(data.length + ' ' + !isNan(secondValue));
+	if(data.length > 3 && !isNaN(secondValue)){
+		console.log('\n\r***Serial Read***');
+		console.log("data: " + data);
+		if (isNaN(thirdValue)) {
+			//set global amperage and wattage
 			amperage = secondValue;
+			wattage = (secondValue / 1000) * 120;
 			//log results
-			console.log("***Read Amps***");
-			console.log("response: " + data);
 			console.log('amperage: ' + secondValue);
-			console.log("***************\n\r");
-		} else if (secondValue >= 0 && isNaN(thirdValue)){
+		} else if (secondValue >= 0 && secondValue <= 5){
 			//set global evState
-			amperage = secondValue;
+			evState = secondValue;
 			//log results
-			console.log("***Read State***");
-			console.log("response: " + data);
 			console.log('evState: ' + secondValue);
-			console.log("****************\n\r");
 		} 
-	}	
+		console.log("***************\n\r");
+	} else {
+		console.log('everything is ' + data);
+	}
 }
 
 var SerialPort = require("serialport").SerialPort;
@@ -113,27 +160,32 @@ var serialPort = new SerialPort("/dev/ttyUSB0", {
 //******************************************************************************
 
 serialPort.on("open", function () {
-	set.maxAmps(maxAmps);
 	var mainInterval = setInterval(function(){
+		console.log('counter ' + counter + ' ********************************');
 		switch (counter) {
 			case 1:
+				//set amperage
+				set.maxAmps(maxAmps);
+				break;
+			case 2:
 				//get amperage
 				get.current();
 				break;
-			case 2:
+			case 3:
 				//get state
 				get.evState();
 				break;
-			case 3:
+			case 4:
 				//log collected values
 				set.log();
 				//send to server
-				
+				send.toLogios();
 				//reset counter
 				counter = 0;
 				break;
 		}
 		counter++;
+
 	}, intervalTime);
 		
 });
